@@ -44,7 +44,7 @@ const designWidth = 440;
 const admissionApi = {
   baseUrl: "https://leaderboard.liruochen.cn",
   campaignId: "zgca-admission",
-  gameId: "craft-big-boss"
+  gameId: "zgca-2048"
 };
 const admissionApiTimeoutMs = 10_000;
 const storageKeys = {
