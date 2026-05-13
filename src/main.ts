@@ -19,9 +19,34 @@ type GameState = {
   isGameOver: boolean;
 };
 
+type RemoteClearState = "idle" | "loading" | "cleared" | "not-cleared" | "syncing" | "error";
+
+type PlayerContext = {
+  userId: string | null;
+  clearState: RemoteClearState;
+  clearedAt: string | null;
+  rank: number | null;
+};
+
+type AdmissionGameStatus = {
+  cleared: boolean;
+  cleared_at: string | null;
+  rank: number | null;
+};
+
+type AdmissionRegisterClearResponse = {
+  game_status: AdmissionGameStatus;
+};
+
 const boardSize = 4;
 const cellCount = boardSize * boardSize;
 const designWidth = 440;
+const admissionApi = {
+  baseUrl: "https://leaderboard.liruochen.cn",
+  campaignId: "zgca-admission",
+  gameId: "craft-big-boss"
+};
+const admissionApiTimeoutMs = 10_000;
 const storageKeys = {
   bestScore: "zgca-2048-best-score",
   unlockedLevels: "zgca-2048-unlocked-levels",
@@ -39,6 +64,29 @@ let touchStartX = 0;
 let touchStartY = 0;
 let virtualPadOpen = false;
 let tutorialOpen = localStorage.getItem(storageKeys.tutorialSeen) !== "true";
+
+const getUserIdFromUrl = () => {
+  const params = new URLSearchParams(window.location.search);
+  const supportedKeys = ["user_id", "userId", "uid"];
+
+  for (const key of supportedKeys) {
+    const value = params.get(key)?.trim();
+
+    if (value) {
+      return value;
+    }
+  }
+
+  return null;
+};
+
+let playerContext: PlayerContext = {
+  userId: getUserIdFromUrl(),
+  clearState: "idle",
+  clearedAt: null,
+  rank: null
+};
+let remoteClearRequestToken = 0;
 
 const updateViewportScale = () => {
   const portraitRatio = window.innerHeight / window.innerWidth;
@@ -106,6 +154,113 @@ const getUnlockedFromBoard = (board: Array<Tile | null>, currentLevels: number[]
 const persistProgress = (state: GameState) => {
   localStorage.setItem(storageKeys.bestScore, String(state.bestScore));
   localStorage.setItem(storageKeys.unlockedLevels, JSON.stringify(state.unlockedLevels));
+};
+
+const callAdmissionApi = async <ResponseBody>(
+  path: "/api/admission/game_status" | "/api/admission/register_clear"
+) => {
+  if (!playerContext.userId) {
+    throw new Error("Missing user id.");
+  }
+
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), admissionApiTimeoutMs);
+
+  const response = await fetch(`${admissionApi.baseUrl}${path}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      campaign_id: admissionApi.campaignId,
+      game_id: admissionApi.gameId,
+      user_id: playerContext.userId
+    }),
+    signal: controller.signal
+  }).finally(() => {
+    window.clearTimeout(timeoutId);
+  });
+
+  if (!response.ok) {
+    throw new Error(`Admission API request failed: ${response.status}`);
+  }
+
+  return (await response.json()) as ResponseBody;
+};
+
+const updateRemoteClearStatus = (gameStatus: AdmissionGameStatus) => {
+  playerContext = {
+    ...playerContext,
+    clearState: gameStatus.cleared ? "cleared" : "not-cleared",
+    clearedAt: gameStatus.cleared_at,
+    rank: gameStatus.rank
+  };
+};
+
+const fetchRemoteClearStatus = async () => {
+  if (!playerContext.userId) {
+    return;
+  }
+
+  const requestToken = ++remoteClearRequestToken;
+  playerContext = {
+    ...playerContext,
+    clearState: "loading"
+  };
+  render();
+
+  try {
+    const gameStatus = await callAdmissionApi<AdmissionGameStatus>("/api/admission/game_status");
+    if (requestToken !== remoteClearRequestToken) {
+      return;
+    }
+    updateRemoteClearStatus(gameStatus);
+  } catch (error) {
+    console.error(error);
+    if (requestToken !== remoteClearRequestToken) {
+      return;
+    }
+    playerContext = {
+      ...playerContext,
+      clearState: "error"
+    };
+  }
+
+  render();
+};
+
+const registerRemoteClear = async () => {
+  if (!playerContext.userId || playerContext.clearState === "syncing") {
+    return;
+  }
+
+  const requestToken = ++remoteClearRequestToken;
+  playerContext = {
+    ...playerContext,
+    clearState: "syncing"
+  };
+  render();
+
+  try {
+    const result = await callAdmissionApi<AdmissionRegisterClearResponse>(
+      "/api/admission/register_clear"
+    );
+    if (requestToken !== remoteClearRequestToken) {
+      return;
+    }
+    updateRemoteClearStatus(result.game_status);
+  } catch (error) {
+    console.error(error);
+    if (requestToken !== remoteClearRequestToken) {
+      return;
+    }
+    playerContext = {
+      ...playerContext,
+      clearState: "error"
+    };
+  }
+
+  render();
 };
 
 const addRandomTile = (board: Array<Tile | null>) => {
@@ -291,6 +446,10 @@ const move = (direction: Direction) => {
 
   persistProgress(state);
   render();
+
+  if (isWon) {
+    void registerRemoteClear();
+  }
 };
 
 const resetGame = () => {
@@ -313,6 +472,56 @@ const selectBuilding = (building: BuildingConfigItem) => {
 };
 
 const getTileClassName = (value: number) => `tile tile-${Math.min(value, 256)}`;
+
+const escapeHtml = (value: string) =>
+  value.replace(
+    /[&<>"']/g,
+    (character) =>
+      ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;"
+      })[character] ?? character
+  );
+
+const getRemoteClearText = () => {
+  if (playerContext.clearState === "loading") {
+    return "通关状态查询中";
+  }
+
+  if (playerContext.clearState === "syncing") {
+    return "通关状态登记中";
+  }
+
+  if (playerContext.clearState === "cleared") {
+    const rankText = playerContext.rank ? ` · 单项第 ${playerContext.rank} 名` : "";
+    return `已登记通关${rankText}`;
+  }
+
+  if (playerContext.clearState === "error") {
+    return "状态同步失败";
+  }
+
+  return "暂未通关";
+};
+
+const renderPlayerStatus = () => {
+  if (!playerContext.userId) {
+    return "";
+  }
+
+  const clearedAt = playerContext.clearedAt ? `<span>${escapeHtml(playerContext.clearedAt)}</span>` : "";
+
+  return `
+    <section class="player-status" aria-live="polite">
+      <span>用户 ${escapeHtml(playerContext.userId)}</span>
+      <strong>${getRemoteClearText()}</strong>
+      ${clearedAt}
+    </section>
+  `;
+};
 
 const renderProgress = () =>
   progressNodes
@@ -456,6 +665,8 @@ const render = () => {
         </div>
       </header>
 
+      ${renderPlayerStatus()}
+
       <section class="progress-card">
         <div class="progress-title">
           <span>楼栋解锁进度</span>
@@ -592,3 +803,4 @@ window.addEventListener("orientationchange", updateViewportScale);
 updateViewportScale();
 persistProgress(state);
 render();
+void fetchRemoteClearStatus();
