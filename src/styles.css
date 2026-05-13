@@ -470,16 +470,16 @@ h2 {
 .virtual-pad {
   position: fixed;
   right: 50%;
-  bottom: calc(env(safe-area-inset-bottom) + 26px);
+  bottom: calc(env(safe-area-inset-bottom) + 16px);
   z-index: 5;
   display: grid;
   grid-template-areas:
     ". up ."
     "left center right"
     ". down .";
-  grid-template-columns: repeat(3, 145px);
-  grid-template-rows: repeat(3, 145px);
-  gap: 20px;
+  grid-template-columns: repeat(3, 60px);
+  grid-template-rows: repeat(3, 60px);
+  gap: 6px;
   padding: 0;
   background: transparent;
   pointer-events: none;
@@ -489,19 +489,19 @@ h2 {
 .virtual-key {
   display: grid;
   place-items: center;
-  border: 7px solid rgba(255, 255, 255, 0.42);
-  border-radius: 50px;
+  border: 3px solid rgba(255, 255, 255, 0.42);
+  border-radius: 18px;
   color: white;
-  font-size: 55px;
+  font-size: 22px;
   font-weight: 1000;
   background: linear-gradient(180deg, rgba(255, 139, 198, 0.46), rgba(106, 114, 255, 0.46));
-  box-shadow: 0 12px 0 rgba(43, 35, 68, 0.14), inset 0 14px 0 rgba(255, 255, 255, 0.14);
+  box-shadow: 0 5px 0 rgba(43, 35, 68, 0.14), inset 0 6px 0 rgba(255, 255, 255, 0.14);
   pointer-events: auto;
 }
 
 .virtual-key:active {
-  transform: translateY(8px);
-  box-shadow: 0 4px 0 rgba(43, 35, 68, 0.14), inset 0 14px 0 rgba(255, 255, 255, 0.14);
+  transform: translateY(4px);
+  box-shadow: 0 1px 0 rgba(43, 35, 68, 0.14), inset 0 6px 0 rgba(255, 255, 255, 0.14);
 }
 
 .virtual-key.up {
