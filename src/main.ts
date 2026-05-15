@@ -486,6 +486,25 @@ const escapeHtml = (value: string) =>
       })[character] ?? character
   );
 
+const formatApiTime = (value: string) => {
+  let parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    parsed = new Date(value.replace(" ", "T") + "Z");
+  }
+
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+
+  const year = parsed.getFullYear();
+  const month = String(parsed.getMonth() + 1).padStart(2, "0");
+  const day = String(parsed.getDate()).padStart(2, "0");
+  const hours = String(parsed.getHours()).padStart(2, "0");
+  const minutes = String(parsed.getMinutes()).padStart(2, "0");
+  const seconds = String(parsed.getSeconds()).padStart(2, "0");
+  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+};
+
 const getRemoteClearText = () => {
   if (playerContext.clearState === "loading") {
     return "通关状态查询中";
@@ -512,7 +531,7 @@ const renderPlayerStatus = () => {
     return "";
   }
 
-  const clearedAt = playerContext.clearedAt ? `<span>${escapeHtml(playerContext.clearedAt)}</span>` : "";
+  const clearedAt = playerContext.clearedAt ? `<span>${escapeHtml(formatApiTime(playerContext.clearedAt))}</span>` : "";
 
   return `
     <section class="player-status" aria-live="polite">
